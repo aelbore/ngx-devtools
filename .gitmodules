@@ -1,0 +1,16 @@
+[submodule "packages/common"]
+	path = packages/common
+	url = https://github.com/aelbore/common.git
+	branch = master
+[submodule "packages/task"]
+	path = packages/task
+	url = https://github.com/aelbore/task.git
+	branch = master
+[submodule "packages/build"]
+	path = packages/build
+	url = https://github.com/aelbore/build.git
+	branch = master
+[submodule "packages/server"]
+	path = packages/server
+	url = https://github.com/aelbore/server.git
+	branch = master
