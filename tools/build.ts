@@ -1,40 +1,76 @@
-import { createRollupConfig, ngxBuild  } from '../packages/common/src/build-package';
-import { clean } from './clean';
+import { globFiles, copyFileAsync, mkdirp, writeFileAsync, clean, readFileAsync } from '../packages/common/src/file';
+import { rollupBuild, PkgOptions, createRollupConfig  } from '../packages/common/src/build-package';
 
-import { globFiles, copyFileAsync } from '../packages/common/src/file';
-import { extname, join, resolve, sep } from 'path';
-import { mkdirp } from './mkdirp';
+import { extname, join, resolve, sep, dirname, basename } from 'path';
 
 const packages = [ 'common', 'build', 'server', 'task' ];
 
-async function copyFiles(files) {
+async function copyFiles(files, folder) {
   return Promise.all(files.map(file => {
-    const destPath = file.replace('src', '.tmp');
+    const destPath = file.replace(join(resolve(), 'packages', folder, 'src'), join('.tmp', folder));
     return copyFileAsync(file, destPath);
   }))
 }
 
+async function writeFilePackageEntry(entryFile, files: Array<string>) {
+  const filter = file => extname(file) === '.ts';
+  const basePath = join(resolve(), 'packages', basename(entryFile, '.ts'), 'src', sep);
+  const map = file => `export * from '${file.replace(basePath, './').replace('.ts', '')}';`;
+  const sourceFiles = files.filter(filter).map(map).join('\n');
+  return writeFileAsync(entryFile, sourceFiles)
+}
+
+async function buildCopyPackageFile(name: string, pkgOptions?: PkgOptions) {
+  const pkgFilePath = join('packages', name, 'package.json');
+  return readFileAsync(pkgFilePath, 'utf8')
+    .then(contents => {
+      const destPath = join('dist', name, 'package.json');
+      mkdirp(dirname(destPath));
+      const pkgContent = JSON.parse(contents);
+      delete(pkgContent.scripts);
+      delete(pkgContent.devDependencies);
+      const pkg = { 
+        ...pkgContent,  
+        ...{ module: `./esm2015/${name}.js` },
+        ...{ esm2015: `./esm2015/${name}.js` },
+        ...{ typings: `${name}.d.ts` },
+        ...{ main: `${name}.js` },
+        ...pkgOptions
+      };
+      return writeFileAsync(destPath, JSON.stringify(pkg, null, 2));
+    });
+}
+
 async function build() {
-  await Promise.all(packages.map(folder => {
-    return Promise.all([ 
-      clean(`packages/${folder}/dist`), 
-      clean(`packages/${folder}/.tmp`) 
-    ])
-  }))
+  const rootFolder = resolve();
 
-  // const filter = file => extname(file) === '.ts';
-  // const map = file => `export * from '${file.replace(join(resolve(), sep, 'src', sep), './').replace('.ts', '')}';`;
-  // const sourceFiles = files.filter(filter).map(map).join('\n');
-    
+  await Promise.all([ clean(`dist`), clean(`.tmp`) ]) 
+  
   for (const folder of packages) {
-    const files = await globFiles(`packages/${folder}/src/**/*.*`);
+    const tmpFolder = join(rootFolder, '.tmp', folder);
+    const entryFile = join(tmpFolder, `${folder}.ts`);
 
-    const tmpFolder = join(resolve(), 'packages', folder, '.tmp');
     await mkdirp(tmpFolder);
 
-    await copyFiles(files);
-  }
+    const files  = await globFiles(`packages/${folder}/src/**/*.*`);
 
+    await Promise.all([
+      copyFiles(files, folder),
+      buildCopyPackageFile(folder),
+      writeFilePackageEntry(entryFile, files)
+    ]);
+
+    const rollupConfig = createRollupConfig({
+      input: entryFile,
+      tsconfig: join(tmpFolder, 'tsconfig.json'),
+      output: {
+        file: join(rootFolder, 'dist', folder, `${folder}.js`),
+        format: 'cjs'
+      }
+    });
+    
+    await rollupBuild(rollupConfig);
+  }
 }
 
 export {  build }
