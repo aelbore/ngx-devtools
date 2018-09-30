@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "clean.all": "gulp clean.all",
+    "unlink.all": "gulp unlink.all",
+    "package.init": "gulp package.init --branch ts",
+    "build": "gulp build"
   },
   "repository": {
     "type": "git",
