@@ -1,40 +1,54 @@
-import { createRollupConfig, ngxBuild  } from '../packages/common/src/build-package';
-import { clean } from './clean';
+import { join, resolve } from 'path';
+import { existsSync } from 'fs';
 
-import { globFiles, copyFileAsync } from '../packages/common/src/file';
-import { extname, join, resolve, sep } from 'path';
-import { mkdirp } from './mkdirp';
+import { clean } from './clean';
 
 const packages = [ 'common', 'build', 'server', 'task' ];
 
-async function copyFiles(files) {
-  return Promise.all(files.map(file => {
-    const destPath = file.replace('src', '.tmp');
-    return copyFileAsync(file, destPath);
-  }))
+async function onBuildAfterHook() {
+  const buildAfterPath = join(process.env.APP_ROOT_PATH, 'build-after.js');
+  if (existsSync(buildAfterPath)) {
+    await import(buildAfterPath).then(({ onAfterBuild }) => onAfterBuild())
+  } 
+}
+
+async function onBuildBeforeHook() {
+  const builBeforePath = join(process.env.APP_ROOT_PATH, 'build-before.js');
+  if (existsSync(builBeforePath)) {
+    await import(builBeforePath).then(({ onBeforeBuild  }) => onBeforeBuild());
+  }
 }
 
 async function build() {
-  await Promise.all(packages.map(folder => {
-    return Promise.all([ 
-      clean(`packages/${folder}/dist`), 
-      clean(`packages/${folder}/.tmp`) 
-    ])
-  }))
+  const rootFolder = resolve(), appRootPath = process.env.APP_ROOT_PATH;
 
-  // const filter = file => extname(file) === '.ts';
-  // const map = file => `export * from '${file.replace(join(resolve(), sep, 'src', sep), './').replace('.ts', '')}';`;
-  // const sourceFiles = files.filter(filter).map(map).join('\n');
-    
+  await clean(`.tmp`);
+
+  const { ngxBuild } = await import(`${rootFolder}/packages/common/src/build-package`);
+  
   for (const folder of packages) {
-    const files = await globFiles(`packages/${folder}/src/**/*.*`);
+    process.env.APP_ROOT_PATH = join(rootFolder, 'packages', folder);
 
-    const tmpFolder = join(resolve(), 'packages', folder, '.tmp');
-    await mkdirp(tmpFolder);
+    const tmpFolder = join(rootFolder, '.tmp', folder);
+    const rollupConfigPath = join(process.env.APP_ROOT_PATH, 'rollup.config');
 
-    await copyFiles(files);
+    const { getRollupConfig } = await import(rollupConfigPath);
+
+    const rollupConfig = getRollupConfig({
+      input: join(tmpFolder, `${folder}.ts`),
+      tsconfig: join(tmpFolder, 'tsconfig.json'),
+      output: {
+        file: join(process.env.APP_ROOT_PATH , 'dist', `${folder}.js`),
+        format: 'cjs'
+      }
+    })
+
+    await onBuildBeforeHook();
+    await ngxBuild(folder, rollupConfig);
+    await onBuildAfterHook();
   }
 
+  process.env.APP_ROOT_PATH = appRootPath;
 }
 
-export {  build }
+export { build }
