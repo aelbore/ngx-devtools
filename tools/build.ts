@@ -1,9 +1,23 @@
+import { join, resolve } from 'path';
+import { existsSync } from 'fs';
 
 import { clean } from './clean';
 
-import { join, resolve } from 'path';
+const packages = [ 'common', 'build', 'server', 'task' ];
 
-const packages = [ 'common', 'build' ];
+async function onBuildAfterHook() {
+  const buildAfterPath = join(process.env.APP_ROOT_PATH, 'build-after.js');
+  if (existsSync(buildAfterPath)) {
+    await import(buildAfterPath).then(({ onAfterBuild }) => onAfterBuild())
+  } 
+}
+
+async function onBuildBeforeHook() {
+  const builBeforePath = join(process.env.APP_ROOT_PATH, 'build-before.js');
+  if (existsSync(builBeforePath)) {
+    await import(builBeforePath).then(({ onBeforeBuild  }) => onBeforeBuild());
+  }
+}
 
 async function build() {
   const rootFolder = resolve(), appRootPath = process.env.APP_ROOT_PATH;
@@ -29,7 +43,9 @@ async function build() {
       }
     })
 
+    await onBuildBeforeHook();
     await ngxBuild(folder, rollupConfig);
+    await onBuildAfterHook();
   }
 
   process.env.APP_ROOT_PATH = appRootPath;
