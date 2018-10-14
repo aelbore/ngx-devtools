@@ -8,13 +8,12 @@
 		"removeComments": true,
 		"sourceMap": true,
 		"outDir": "dist",
-		"rootDir": "src",
+		"rootDir": ".",
 		"declaration": true,
 		"allowSyntheticDefaultImports": true,
 		"baseUrl": ".",
 		"lib": ["es5", "es6", "dom"],
-		"importHelpers": true,
-		"allowJs": true
+		"importHelpers": true
 	},
 	"include": [
 		"src/**/*.ts",
